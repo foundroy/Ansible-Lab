@@ -1,0 +1,57 @@
+---
+- name: "Aruba Orchestrator API Device Onboarding Playbook"
+  hosts: localhost
+  gather_facts: no
+  vars_files:
+    - vars/credentials.yml
+  tasks:
+    - name: "Install required packages"
+      ansible.builtin.pip:
+        name:
+          - requests
+          - pandas
+      delegate_to: localhost
+
+    - name: "Read device data from CSV"
+      community.general.read_csv:
+        path: "files/devices.csv"
+        fieldnames:
+          - device_name
+          - device_ip
+          - device_type
+          - group
+      register: devices_data
+
+    - name: "Request JWT token"
+      uri:
+        url: "https://{{ aruba_orchestrator }}/api/v1/login"
+        method: POST
+        body_format: json
+        body:
+          username: "{{ username }}"
+          password: "{{ password }}"
+        return_content: yes
+      register: jwt_token
+
+    - name: "Set JWT token"
+      set_fact:
+        token: "Bearer {{ jwt_token.json.token }}"
+
+    - name: "Onboard devices from CSV"
+      uri:
+        url: "https://{{ aruba_orchestrator }}/api/v1/devices"
+        method: POST
+        body_format: json
+        headers:
+          Authorization: "{{ token }}"
+        body:
+          device_name: "{{ item.device_name }}"
+          device_ip: "{{ item.device_ip }}"
+          device_type: "{{ item.device_type }}"
+          group: "{{ item.group }}"
+      loop: "{{ devices_data.list }}"
+      register: onboard_results
+
+    - name: "Display results"
+      debug:
+        var: onboard_results

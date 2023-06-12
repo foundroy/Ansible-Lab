@@ -1,0 +1,51 @@
+---
+- name: Device Onboarding with Aruba Orchestrator API
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Read CSV file
+      read_csv:
+        path: "{{ csv_file_path }}"
+        fieldnames: "{{ csv_fieldnames }}"
+      register: device_data
+
+    - name: Obtain JWT token
+      uri:
+        url: "{{ aruba_api_base_url }}/auth/login"
+        method: POST
+        body_format: json
+        headers:
+          Content-Type: "application/json"
+        body:
+          username: "{{ aruba_api_username }}"
+          password: "{{ aruba_api_password }}"
+        status_code: 200
+        return_content: yes
+      register: jwt_token_response
+      no_log: true
+
+    - name: Set JWT token fact
+      set_fact:
+        jwt_token: "{{ jwt_token_response.json.token }}"
+
+    - name: Onboard devices
+      loop: "{{ device_data.list }}"
+      uri:
+        url: "{{ aruba_api_base_url }}/devices"
+        method: POST
+        body_format: json
+        headers:
+          Content-Type: "application/json"
+          Authorization: "Bearer {{ jwt_token }}"
+        body:
+          device_name: "{{ item.device_name }}"
+          device_serial_number: "{{ item.device_serial_number }}"
+          device_ip: "{{ item.device_ip }}"
+          device_type: "{{ item.device_type }}"
+        status_code: 201
+        return_content: yes
+      register: onboarding_results
+
+    - name: Display onboarding results
+      debug:
+        var: onboarding_results.results

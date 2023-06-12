@@ -1,0 +1,38 @@
+---
+- name: Interact with Cisco DNA Center API to post configuration files
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Render configuration file from Jinja template
+      template:
+        src: templates/ios-master.j2
+        dest: configs/rendered_config.conf
+
+    - name: Read contents of the rendered configuration file
+      ansible.builtin.slurp:
+        src: configs/rendered_config.conf
+      register: rendered_config
+
+    - name: Encode rendered configuration file content as base64
+      set_fact:
+        encoded_config: "{{ rendered_config['content'] | b64encode }}"
+
+    - name: Post configuration to Cisco DNA Center API
+      uri:
+        url: "https://{{ dnac_ip_address }}/api/v1/network-device-config"
+        method: POST
+        headers:
+          Content-Type: "application/json"
+          X-Auth-Token: "{{ api_token }}"
+        body_format: json
+        body:
+          config:
+            - config: "{{ encoded_config }}"
+              configType: running-config
+              deviceIpAddress: "{{ device_ip_address }}"
+        status_code: 202
+      register: api_response
+
+    - name: Display API response
+      debug:
+        var: api_response
